@@ -22,11 +22,11 @@ app.get("/search", (req, res) => {
 
   const matchingRecords = jsonData.Students.filter(
     (student) =>
-      student.address.zip === zip ||
-      student.Name.includes(name) ||
-      student.address.city.includes(city) ||
-      student.address.state === state ||
-      student.Major.includes(major)
+      (!zip || student.address.zip === zip) &&
+      (!name || student.Name.includes(name)) &&
+      (!city || student.address.city.includes(city)) &&
+      (!state || student.address.state === state) &&
+      (!major || student.Major.includes(major))
   );
 
   res.json(matchingRecords);
@@ -36,24 +36,43 @@ app.get("/search", (req, res) => {
 app.post("/create-pdf", async (req, res) => {
   const studentData = req.body;
 
-  const pdfDoc = await PDFDocument.create();
-  const page = pdfDoc.addPage();
+  try {
+    const pdfDoc = await PDFDocument.create();
+    const page = pdfDoc.addPage();
 
-  const form = pdfDoc.getForm();
-  const nameField = form.createTextField("name");
-  nameField.setText(studentData.Name);
+    const form = pdfDoc.getForm();
 
-  // ... add more fields here
+    // Create and set text fields using student data
+    const nameField = form.createTextField("name");
+    nameField.setText(studentData.Name);
 
-  const pdfBytes = await pdfDoc.save();
+    const majorField = form.createTextField("major");
+    majorField.setText(studentData.Major);
 
-  const pdfFilePath = `./pdfs/${studentData.Name}.pdf`;
+    const stateField = form.createTextField("state");
+    stateField.setText(studentData.address.state);
 
-  fs.writeFileSync(pdfFilePath, pdfBytes);
+    // ... add more fields here
 
-  res.json({ message: "PDF created successfully", pdfPath: pdfFilePath });
+    const pdfBytes = await pdfDoc.save();
+
+    const sanitizedFileName = studentData.Name.replace(/[^a-zA-Z0-9]/g, "_");
+    const pdfFilePath = `./pdfs/${sanitizedFileName}.pdf`;
+
+    // Check if the 'pdfs' directory exists, create it if not
+    if (!fs.existsSync("./pdfs")) {
+      fs.mkdirSync("./pdfs");
+    }
+
+    // Write the PDF to the specified path
+    fs.writeFileSync(pdfFilePath, pdfBytes);
+
+    res.json({ message: "PDF created successfully", pdfPath: pdfFilePath });
+  } catch (error) {
+    console.error("Error creating PDF:", error);
+    res.status(500).json({ error: "Error creating PDF" });
+  }
 });
-
 // Function to edit PDF
 app.put("/edit-pdf", async (req, res) => {
   const { pdfPath, newText } = req.body;
